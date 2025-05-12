@@ -24,7 +24,8 @@ jobs:
           node-version: '21'
       - name: Update the versions
         run: |
-          version=${{ github.event.inputs.version }}
+          echo "${{ github.event.inputs.version }}"
+          version="${{ github.event.inputs.version }}"
           echo "RELEASE_VERSION=$version" >> $GITHUB_ENV
 
           # update version
