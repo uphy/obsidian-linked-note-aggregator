@@ -24,13 +24,12 @@ jobs:
           node-version: '21'
       - name: Update the versions
         run: |
-          echo "${{ github.event.inputs.version }}"
-          version="${{ github.event.inputs.version }}"
+          version=${{ github.event.inputs.version }}
           echo "RELEASE_VERSION=$version" >> $GITHUB_ENV
 
           # update version
           sed -i "s/\"version\": \".*\"/\"version\": \"$version\"/" package.json
-          npm run version
+          npm run version-bump
 
           # commit and push the changes
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
