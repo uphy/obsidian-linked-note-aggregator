@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, getAllTags, parseFrontMatterTags } from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, getAllTags } from 'obsidian';
 
 interface LinkedNoteAggregatorPluginSettings {
 	ignoredTags: string;
@@ -118,7 +118,7 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 
 				// 3. Add tag information to output
 				if (Object.keys(referencedByTags).length > 0) {
-					output += '--- tags ---\n';
+					output += '*** tags ***\n';
 					for (const tag in referencedByTags) {
 						output += `- ${tag}\n`;
 						if (referencedByTags[tag].length > 0) {
@@ -129,12 +129,19 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 					}
 					output += '\n'; // Add a newline after the tags section
 				}
+				if (allReferencedFiles.size > 0) {
+					output += '*** referenced files ***\n';
+					for (const file of allReferencedFiles) {
+						output += `- [[${file.basename}]]\n`;
+					}
+					output += '\n'; // Add a newline after the referenced files section
+				}
 
 
 				// 4. Add content of each referenced note to output
 				for (const file of allReferencedFiles) {
 					if (file.path !== activeFile.path) { // Active file already added
-						output += `--- file: ${file.name} ---\n`;
+						output += `*** file: ${file.name} ***\n`;
 						const content = await this.app.vault.read(file);
 						output += content + '\n\n'; // Add an extra newline for separation
 					}
