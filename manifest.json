@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "linked-note-aggregator",
+	"name": "Linked Note Aggregator",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "This plugin provides a command to recursively copy the content of the active note and all notes linked from it (directly or indirectly via links and tags) to the clipboard.",
+	"author": "uphy",
+	"authorUrl": "https://github.com/uphy/obsidian-linked-note-aggregator",
+	"fundingUrl": "https://buymeacoffee.com/uphy",
 	"isDesktopOnly": false
 }

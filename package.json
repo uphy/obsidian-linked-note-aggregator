@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-linked-note-aggregator",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "This plugin provides a command to recursively copy the content of the active note and all notes linked from it (directly or indirectly via links and tags) to the clipboard.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
