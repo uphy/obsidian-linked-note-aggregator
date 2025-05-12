@@ -13,9 +13,9 @@ const DEFAULT_SETTINGS: LinkedNoteAggregatorPluginSettings = {
 export default class LinkedNoteAggregatorPlugin extends Plugin {
 	settings: LinkedNoteAggregatorPluginSettings;
 
+
 	async onload() {
 		await this.loadSettings();
-
 		// This adds a command that can be triggered anywhere
 		this.addCommand({
 			id: 'aggregate-linked-notes',
@@ -28,13 +28,12 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 
 				const activeFile = view.file;
 				let output = '';
-				const processedFiles = new Set<string>();
+				const processedFiles = new Set<string>(); // Keep track of processed file paths
 				const filesToProcess: TFile[] = [activeFile];
-				const allReferencedFiles = new Set<TFile>();
+				const allReferencedFiles = new Set<TFile>(); // All collected referenced files
 
 				const ignoredTagsArray = this.settings.ignoredTags.split('\n').map(tag => tag.trim()).filter(tag => tag !== '');
 				const ignoredDirectoriesArray = this.settings.ignoredDirectories.split('\n').map(dir => dir.trim()).filter(dir => dir !== '');
-
 				// Function to check if a file should be ignored based on frontmatter tags or directory
 				const shouldIgnoreFile = (file: TFile): boolean => {
 					// Check ignored directories
@@ -43,94 +42,71 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 							return true;
 						}
 					}
-					// Check ignored tags in frontmatter
-					const fileCache = this.app.metadataCache.getFileCache(file);
-					if (fileCache?.frontmatter) {
-						const frontmatterTags = parseFrontMatterTags(fileCache.frontmatter);
-						if (frontmatterTags) {
-							for (const tag of frontmatterTags) {
-								if (ignoredTagsArray.includes(tag.startsWith('#') ? tag.substring(1) : tag)) {
-									return true;
-								}
-							}
-						}
-					}
 					return false;
 				};
 
-				// 1. Add content of the active note (if not ignored)
-				if (!shouldIgnoreFile(activeFile)) {
-					const activeFileContent = await this.app.vault.read(activeFile);
-					output += activeFileContent + '\n\n';
-					processedFiles.add(activeFile.path);
-				} else {
-					new Notice(`Active file "${activeFile.basename}" is ignored based on settings.`);
-					// If the active file itself is ignored, we might want to stop or handle differently.
-					// For now, we'll just not include it and proceed with linked files if any.
-				}
-
+				// 1. Add content of the active note
+				const activeFileContent = await this.app.vault.read(activeFile);
+				output += activeFileContent + '\n\n';
+				processedFiles.add(activeFile.path);
 
 				// 2. Recursively collect referenced notes
 				const referencedByTags: Record<string, TFile[]> = {};
-				let currentIndex = 0;
 
-				// Start processing loop only if the active file was not ignored or if we decide to process its links anyway
-				// For this example, we'll proceed to check its links even if the active file content is ignored.
-				// filesToProcess still contains the activeFile initially.
+				let currentIndex = 0;
 				while (currentIndex < filesToProcess.length) {
 					const currentFile = filesToProcess[currentIndex];
 					currentIndex++;
-					if (!currentFile || shouldIgnoreFile(currentFile) && currentFile.path !== activeFile.path) {
-						if(currentFile && currentFile.path !== activeFile.path) processedFiles.add(currentFile.path);
+
+					if (!currentFile) {
 						continue;
 					}
 
 					const fileCache = this.app.metadataCache.getFileCache(currentFile);
-					if (!fileCache) continue;
+					if (!fileCache) {
+						continue;
+					}
 
 					// 2a. Collect linked notes
 					if (fileCache.links) {
 						for (const link of fileCache.links) {
-							const linkedFile = this.app.metadataCache.getFirstLinkpathDest(link.link, currentFile.path);
-							if (linkedFile instanceof TFile && !processedFiles.has(linkedFile.path)) {
-								if (!shouldIgnoreFile(linkedFile)) {
-									filesToProcess.push(linkedFile);
-									allReferencedFiles.add(linkedFile);
-								}
-								processedFiles.add(linkedFile.path);
+							const linkedFilePath = this.app.metadataCache.getFirstLinkpathDest(link.link, currentFile.path);
+							if (linkedFilePath instanceof TFile && !processedFiles.has(linkedFilePath.path) && !shouldIgnoreFile(linkedFilePath)) {
+								filesToProcess.push(linkedFilePath);
+								allReferencedFiles.add(linkedFilePath);
+								processedFiles.add(linkedFilePath.path); // Record when added to processing list
 							}
 						}
 					}
 
-					if (currentFile.path === activeFile.path || !shouldIgnoreFile(currentFile)) {
-						if (fileCache.tags) {
-							for (const tagCache of fileCache.tags) {
-								const tagName = tagCache.tag.startsWith('#') ? tagCache.tag.substring(1) : tagCache.tag;
-								if (ignoredTagsArray.includes(tagName)) continue;
-				
-								if (!referencedByTags[tagCache.tag]) {
-									referencedByTags[tagCache.tag] = [];
-								}
-				
-								const allMarkdownFiles = this.app.vault.getMarkdownFiles();
-								for (const mdFile of allMarkdownFiles) {
-									if (mdFile.path === currentFile.path || processedFiles.has(mdFile.path)) continue;
-									if (shouldIgnoreFile(mdFile)) {
-										processedFiles.add(mdFile.path);
-										continue;
-									}
-				
-									const mdFileCache = this.app.metadataCache.getFileCache(mdFile);
-									if (mdFileCache?.tags) {
-										const tagsInMdFile = mdFileCache.tags.map(t => t.tag);
-										if (tagsInMdFile.includes(tagCache.tag)) {
-											if (!referencedByTags[tagCache.tag].find(f => f.path === mdFile.path)) {
-												referencedByTags[tagCache.tag].push(mdFile);
-											}
-											if (!filesToProcess.find(f => f.path === mdFile.path) && !allReferencedFiles.has(mdFile)) {
-												filesToProcess.push(mdFile);
-												allReferencedFiles.add(mdFile);
-											}
+					// 2b. Collect notes referenced by tags (Note: getAllTags only gets tags from the current file)
+					// To find which notes a tag refers to, we'd need to scan all notes for that tag.
+					// This implements logic to add notes related to the current file's tags to referencedByTags.
+					const tagsInFile = getAllTags(fileCache);
+					if (tagsInFile) {
+						for (const tag of tagsInFile) {
+							if (ignoredTagsArray.includes(tag)) {
+								continue; // Skip ignored tags
+							}
+							if (!referencedByTags[tag]) {
+								referencedByTags[tag] = [];
+							}
+							// Get all Markdown files and check their tags
+							const allMarkdownFiles = this.app.vault.getMarkdownFiles();
+							for (const mdFile of allMarkdownFiles) {
+								if (mdFile.path === currentFile.path) continue; // Exclude self
+
+								const mdFileCache = this.app.metadataCache.getFileCache(mdFile);
+								if (mdFileCache) {
+									const tagsInMdFile = getAllTags(mdFileCache);
+									if (tagsInMdFile && tagsInMdFile.includes(tag)) {
+										if (!referencedByTags[tag].find(f => f.path === mdFile.path)) {
+											referencedByTags[tag].push(mdFile);
+										}
+										if (!processedFiles.has(mdFile.path)) {
+											filesToProcess.push(mdFile);
+											allReferencedFiles.add(mdFile);
+											processedFiles.add(mdFile.path);
 										}
 									}
 								}
@@ -144,42 +120,31 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 				if (Object.keys(referencedByTags).length > 0) {
 					output += '--- tags ---\n';
 					for (const tag in referencedByTags) {
-						// Filter out files associated with this tag if they were ultimately ignored
-						const validFilesForTag = referencedByTags[tag].filter(f => !shouldIgnoreFile(f) && allReferencedFiles.has(f));
-						if (validFilesForTag.length > 0) {
-							output += `- ${tag}\n`;
-							for (const file of validFilesForTag) {
+						output += `- ${tag}\n`;
+						if (referencedByTags[tag].length > 0) {
+							for (const file of referencedByTags[tag]) {
 								output += `  - [[${file.basename}]]\n`;
 							}
 						}
 					}
-					output += '\n';
+					output += '\n'; // Add a newline after the tags section
 				}
 
 
 				// 4. Add content of each referenced note to output
-				// Ensure active file content is only added if it wasn't ignored initially
-				let activeFileContentAdded = output.includes(await this.app.vault.cachedRead(activeFile));
-
 				for (const file of allReferencedFiles) {
-					if (file.path === activeFile.path && activeFileContentAdded) continue; // Already added and not ignored
-					if (shouldIgnoreFile(file)) continue; // Double check, though already filtered
-
-					output += `--- file: ${file.name} ---\n`;
-					const content = await this.app.vault.read(file);
-					output += content + '\n\n';
+					if (file.path !== activeFile.path) { // Active file already added
+						output += `--- file: ${file.name} ---\n`;
+						const content = await this.app.vault.read(file);
+						output += content + '\n\n'; // Add an extra newline for separation
+					}
 				}
 
-				if (output.trim() === "") {
-					new Notice('No content to aggregate based on current settings and links.');
-					return;
-				}
-
+				// Copy to clipboard
 				await navigator.clipboard.writeText(output.trim());
-				new Notice('Linked notes aggregated to clipboard!');
+				new Notice('Linked notes aggregated to clipboard!'); // Updated notice message
 			}
 		});
-
 		this.addSettingTab(new LinkedNoteAggregatorSettingTab(this.app, this));
 	}
 
@@ -191,6 +156,7 @@ export default class LinkedNoteAggregatorPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 }
+
 
 class LinkedNoteAggregatorSettingTab extends PluginSettingTab {
 	plugin: LinkedNoteAggregatorPlugin;
